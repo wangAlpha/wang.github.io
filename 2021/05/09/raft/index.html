@@ -22,7 +22,7 @@
 <script class="next-config" data-name="main" type="application/json">{&quot;hostname&quot;:&quot;wangalpha.github.io&quot;,&quot;root&quot;:&quot;&#x2F;&quot;,&quot;images&quot;:&quot;&#x2F;images&quot;,&quot;scheme&quot;:&quot;Gemini&quot;,&quot;version&quot;:&quot;8.4.0&quot;,&quot;exturl&quot;:false,&quot;sidebar&quot;:{&quot;position&quot;:&quot;right&quot;,&quot;display&quot;:&quot;always&quot;,&quot;padding&quot;:18,&quot;offset&quot;:12},&quot;copycode&quot;:false,&quot;bookmark&quot;:{&quot;enable&quot;:false,&quot;color&quot;:&quot;#222&quot;,&quot;save&quot;:&quot;auto&quot;},&quot;fancybox&quot;:false,&quot;mediumzoom&quot;:false,&quot;lazyload&quot;:false,&quot;pangu&quot;:false,&quot;comments&quot;:{&quot;style&quot;:&quot;tabs&quot;,&quot;active&quot;:null,&quot;storage&quot;:true,&quot;lazyload&quot;:false,&quot;nav&quot;:null},&quot;motion&quot;:{&quot;enable&quot;:true,&quot;async&quot;:false,&quot;transition&quot;:{&quot;post_block&quot;:&quot;fadeIn&quot;,&quot;post_header&quot;:&quot;fadeInDown&quot;,&quot;post_body&quot;:&quot;fadeInDown&quot;,&quot;coll_header&quot;:&quot;fadeInLeft&quot;,&quot;sidebar&quot;:&quot;fadeInUp&quot;}},&quot;prism&quot;:false,&quot;i18n&quot;:{&quot;placeholder&quot;:&quot;搜索...&quot;,&quot;empty&quot;:&quot;没有找到任何搜索结果：${query}&quot;,&quot;hits_time&quot;:&quot;找到 ${hits} 个搜索结果（用时 ${time} 毫秒）&quot;,&quot;hits&quot;:&quot;找到 ${hits} 个搜索结果&quot;}}</script>
 <meta name="description" content="理解 Raft 协议最近在学习mit 6.824课程，重新阅读了一些论文，拿本博客记录一下自己的学习。 大名鼎鼎的Paxos算法不少人都听说过，据说世界上有两种一致性算法，一种是Paxos算法，一类的Paxos算法变种。但由于Paxos的晦涩难懂和作者本人一样出名，也非常难以实习。斯坦福的两位教授（Diego Ongaro 和 John Ousterhout）设计了一个效果和Paxos相同但更易理">
 <meta property="og:type" content="article">
-<meta property="og:title" content="raft">
+<meta property="og:title" content="理解 Raft 协议">
 <meta property="og:url" content="https://wangalpha.github.io/2021/05/09/raft/index.html">
 <meta property="og:site_name" content="旺旺">
 <meta property="og:description" content="理解 Raft 协议最近在学习mit 6.824课程，重新阅读了一些论文，拿本博客记录一下自己的学习。 大名鼎鼎的Paxos算法不少人都听说过，据说世界上有两种一致性算法，一种是Paxos算法，一类的Paxos算法变种。但由于Paxos的晦涩难懂和作者本人一样出名，也非常难以实习。斯坦福的两位教授（Diego Ongaro 和 John Ousterhout）设计了一个效果和Paxos相同但更易理">
@@ -39,7 +39,7 @@
 <meta property="og:image" content="https://wangalpha.github.io/Users/liwang/Documents/Blog/blog/source/_posts/raft/fig11.png">
 <meta property="og:image" content="https://wangalpha.github.io/Users/liwang/Documents/Blog/blog/source/_posts/raft/compaction.png">
 <meta property="article:published_time" content="2021-05-09T08:41:16.000Z">
-<meta property="article:modified_time" content="2021-05-10T04:41:31.000Z">
+<meta property="article:modified_time" content="2021-05-10T04:43:04.000Z">
 <meta property="article:author" content="liwang">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:image" content="https://wangalpha.github.io/Users/liwang/Documents/Blog/blog/source/_posts/raft/states.png">
@@ -49,10 +49,10 @@
 
 
 
-<script class="next-config" data-name="page" type="application/json">{&quot;sidebar&quot;:&quot;&quot;,&quot;isHome&quot;:false,&quot;isPost&quot;:true,&quot;lang&quot;:&quot;zh-CN&quot;,&quot;comments&quot;:true,&quot;permalink&quot;:&quot;https:&#x2F;&#x2F;wangalpha.github.io&#x2F;2021&#x2F;05&#x2F;09&#x2F;raft&#x2F;&quot;,&quot;path&quot;:&quot;2021&#x2F;05&#x2F;09&#x2F;raft&#x2F;&quot;,&quot;title&quot;:&quot;raft&quot;}</script>
+<script class="next-config" data-name="page" type="application/json">{&quot;sidebar&quot;:&quot;&quot;,&quot;isHome&quot;:false,&quot;isPost&quot;:true,&quot;lang&quot;:&quot;zh-CN&quot;,&quot;comments&quot;:true,&quot;permalink&quot;:&quot;https:&#x2F;&#x2F;wangalpha.github.io&#x2F;2021&#x2F;05&#x2F;09&#x2F;raft&#x2F;&quot;,&quot;path&quot;:&quot;2021&#x2F;05&#x2F;09&#x2F;raft&#x2F;&quot;,&quot;title&quot;:&quot;理解 Raft 协议&quot;}</script>
 
 <script class="next-config" data-name="calendar" type="application/json">&quot;&quot;</script>
-<title>raft | 旺旺</title><script src="/js/config.js"></script>
+<title>理解 Raft 协议 | 旺旺</title><script src="/js/config.js"></script>
   
 
 
@@ -194,7 +194,7 @@
     </span>
       <header class="post-header">
         <h1 class="post-title" itemprop="name headline">
-          raft
+          理解 Raft 协议
         </h1>
 
         <div class="post-meta-container">
@@ -212,7 +212,7 @@
           <i class="far fa-calendar-check"></i>
         </span>
         <span class="post-meta-item-text">更新于</span>
-        <time title="修改时间：2021-05-10 12:41:31" itemprop="dateModified" datetime="2021-05-10T12:41:31+08:00">2021-05-10</time>
+        <time title="修改时间：2021-05-10 12:43:04" itemprop="dateModified" datetime="2021-05-10T12:43:04+08:00">2021-05-10</time>
       </span>
 
   
@@ -229,7 +229,7 @@
 <p>大名鼎鼎的Paxos算法不少人都听说过，据说世界上有两种一致性算法，一种是Paxos算法，一类的Paxos算法变种。但由于Paxos的晦涩难懂和作者本人一样出名，也非常难以实习。斯坦福的两位教授（Diego Ongaro 和 John Ousterhout）设计了一个效果和Paxos相同但更易理解的算法，它就是Raft算法。想了解算法可以阅读原论文”In search of an Understandable Consensus Algorithm”，网上有原文和作者的讲解视频：<a target="_blank" rel="noopener" href="https://www.usenix.org/conference/atc14/technical-sessions/presentation/ongaro">In Search of an Understandable Consensus Algorithm</a>。</p>
 <h2 id="Raft-算法概述"><a href="#Raft-算法概述" class="headerlink" title="Raft 算法概述"></a>Raft 算法概述</h2><p>raft的首要目标就是<strong>容易理解（Understandable)</strong>, 这从论文的标题就可以看出来。同时在保证这个大前提的下算法的可靠性、可用性和性能不输Paxos算法。</p>
 <blockquote>
-<p>Raft more understandable than Paxos and also provides a better foundation for building practical systems. </p>
+<p>Raft more understandable than Paxos and also provides a better foundation for building practical systems.</p>
 </blockquote>
 <p>为了达成这个这个目标，Raft主要做了两件事情：</p>
 <ul>
