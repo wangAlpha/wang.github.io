@@ -254,6 +254,13 @@
 
       <time title="创建时间：2021-05-09 16:41:16" itemprop="dateCreated datePublished" datetime="2021-05-09T16:41:16+08:00">2021-05-09</time>
     </span>
+      <span class="post-meta-item">
+        <span class="post-meta-item-icon">
+          <i class="far fa-calendar-check"></i>
+        </span>
+        <span class="post-meta-item-text">更新于</span>
+        <time title="修改时间：2021-05-10 12:41:31" itemprop="dateModified" datetime="2021-05-10T12:41:31+08:00">2021-05-10</time>
+      </span>
 
   
 </div>
@@ -265,7 +272,114 @@
     
     
     <div class="post-body" itemprop="articleBody">
-          
+          <h1 id="理解-Raft-协议"><a href="#理解-Raft-协议" class="headerlink" title="理解 Raft 协议"></a>理解 Raft 协议</h1><p>最近在学习mit 6.824课程，重新阅读了一些论文，拿本博客记录一下自己的学习。</p>
+<p>大名鼎鼎的Paxos算法不少人都听说过，据说世界上有两种一致性算法，一种是Paxos算法，一类的Paxos算法变种。但由于Paxos的晦涩难懂和作者本人一样出名，也非常难以实习。斯坦福的两位教授（Diego Ongaro 和 John Ousterhout）设计了一个效果和Paxos相同但更易理解的算法，它就是Raft算法。想了解算法可以阅读原论文”In search of an Understandable Consensus Algorithm”，网上有原文和作者的讲解视频：<a target="_blank" rel="noopener" href="https://www.usenix.org/conference/atc14/technical-sessions/presentation/ongaro">In Search of an Understandable Consensus Algorithm</a>。</p>
+<h2 id="Raft-算法概述"><a href="#Raft-算法概述" class="headerlink" title="Raft 算法概述"></a>Raft 算法概述</h2><p>raft的首要目标就是<strong>容易理解（Understandable)</strong>, 这从论文的标题就可以看出来。同时在保证这个大前提的下算法的可靠性、可用性和性能不输Paxos算法。</p>
+<blockquote>
+<p>Raft more understandable than Paxos and also provides a better foundation for building practical systems. </p>
+</blockquote>
+<p>为了达成这个这个目标，Raft主要做了两件事情：</p>
+<ul>
+<li>问题分解</li>
+<li>状态简化</li>
+</ul>
+<p><strong>问题分解</strong>是把一个主要问题分解成了若干个子问题包括: Leader election， log replication，safety，membership changes;而<strong>状态简化</strong>是把角色的状态简化为三个: Leader ，Follower，Candidate。</p>
+<p>Raft相比Paxos有很多相似之处，但是有这么几个新特性：</p>
+<ul>
+<li><strong>Strong leader</strong>：使用strong leader可以简化管理。例如log entries只从leader流向其他server.</li>
+<li><strong>Leader election</strong>：使用randomized timer来简化选举过程。相比其他共识算法增加了heartbeat机制</li>
+<li><strong>Membership changes</strong>：Raft变更服务器集群的使用了一种新的方法，保证了服务器的配置变更也能继续运行。</li>
+</ul>
+<h2 id="Leader-election"><a href="#Leader-election" class="headerlink" title="Leader election"></a>Leader election</h2><p>相比Paxos复杂的角色划分，Raft算法只有三种角色分类：Follower、Candidate和Leader。所有的Server都会在这三种角色中相互转换，转换流程如下：</p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/states.png" alt="image-20210510104325632"></p>
+<ol>
+<li>所有节点启动时都是follower状态；</li>
+<li>在一段时间内如果没有收到来自leader的心跳，从follower切换到candidate，发起选举;</li>
+<li>如果收到<strong>过半</strong>票（含自己的一票）则切换到leader状态；如果发现其他节点<strong>日志</strong>比自己更新，则主动切换到follower。</li>
+</ol>
+<p>系统中最多只有一个Leader，如果在一段时间里发现没有Leader，则大家通过选举-投票选出Leader。Leader会不停的给follower发心跳消息，表明自己的存活状态。如果Leader故障，那么follower会转换成candidate，重新选出Leader。</p>
+<h3 id="Term"><a href="#Term" class="headerlink" title="Term"></a><strong>Term</strong></h3><p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/term.png"></p>
+<p>Term以选举（election）开始，然后就是一段或长或短的稳定工作期（Normal operation）。从上图可以看到，任期是<strong>递增</strong>的，这就充当了<strong>逻辑时钟</strong>的作用；另外，term 3展示了一种情况，就是说没有选举出leader就结束了，然后会发起新的选举，后面会解释这种<strong>split vote</strong>的情况。</p>
+<h3 id="选举启动条件"><a href="#选举启动条件" class="headerlink" title="选举启动条件"></a><strong>选举启动条件</strong></h3><p>Follower在Election timeout内没有收到来自leader的心跳，（也许此时还没有选出leader，大家都在等；也许Leader炸了；也许只是leader与该follower之间网线被老鼠咬断了），则会主动发起选举。<br><strong>步骤</strong></p>
+<ol>
+<li>增加节点本地的 current term ，切换到candidate状态</li>
+<li>投自己一票</li>
+<li>并行给其他节点发送 RequestVote RPCs</li>
+<li>等待其他节点的回复</li>
+</ol>
+<p><strong>出现结果</strong></p>
+<ol>
+<li>收到majority的投票（含自己的一票），则赢得选举，成为leader</li>
+<li>被告知别人已当选，那么自行切换到follower</li>
+<li>一段时间内没有收到majority投票，则保持candidate状态，重新发出选举</li>
+</ol>
+<p><strong>投票限制</strong></p>
+<ol>
+<li>在任一任期内，单个节点最多只能投一票</li>
+<li>候选人知道的信息不能比自己的少</li>
+<li>first-come-first-served 先来先得</li>
+</ol>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/election1.png"></p>
+<p>若有三个节点A B C（上图）。A B同时发起选举，而A的选举消息先到达C，C给A投了一票，当B的消息到达C时，已经不能满足上面提到的第一个约束，即C不会给B投票，而A和B显然都不会给对方投票。A胜出之后，会给B,C发心跳消息，节点B发现节点A的term不低于自己的term，知道有已经有Leader了，于是转换成follower。</p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/election2.png"></p>
+<p>若没有任何节点获得过半投票，比如上图。则等待超时，引入<strong>randomized election timeouts</strong>和<strong>奇数</strong>个节点避免</p>
+<h2 id="Log-replication"><a href="#Log-replication" class="headerlink" title="Log replication"></a>Log replication</h2><h3 id="Replicated-state-machines"><a href="#Replicated-state-machines" class="headerlink" title="Replicated state machines"></a>Replicated state machines</h3><p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/fig1.png" alt="image-20210510095147084"></p>
+<p>共识算法基于<strong>Replicated state machines</strong>来实现，即<strong>相同的初识状态</strong> <strong>+</strong> <strong>相同的输入</strong> <strong>=</strong> <strong>相同的结束状态</strong></p>
+<p>Leader将客户端<strong>请求</strong>（command）封装到一个个<strong>log entry</strong>，将这些log entries复制（replicate）到所有follower节点，然后大家按相同顺序应用（apply）log entry中的command，则最终状态肯定是一致的。</p>
+<p><strong>请求完整流程</strong></p>
+<ol>
+<li><p>leader append log entry</p>
+</li>
+<li><p>leader issue AppendEntries RPC in parallel</p>
+</li>
+<li><p>leader wait for majority response</p>
+</li>
+<li><p>leader apply entry to state machine</p>
+</li>
+<li><p>leader reply to client</p>
+</li>
+<li><p>leader notify follower apply log</p>
+</li>
+</ol>
+<p>由于是远程请求，各个节点的操作都经过RPC实现</p>
+<h3 id="Log-matching"><a href="#Log-matching" class="headerlink" title="Log matching"></a>Log matching</h3><p>每个log entry不仅包含client的command还包含log entry的leader term，每个节点不要求完全一致，只求最终一致。未达到最终一致的时候，leader会不断尝试给follower发log entry，直到完全一致</p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/fig8.png" alt="image-20210510094434345"></p>
+<p>由于server的连接可能出现问题，每个server的log entries都有可能不同，根据下图的情况可以进行分类做log matching:</p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/fig9.png" alt="image-20210510094458034"></p>
+<ul>
+<li>出现follower的log index比master少或者term比当前term小，则进行额外的log commit</li>
+<li>log index大于当前index或者term高于当前log entries的，进行log删除</li>
+<li>log term小于或者不同于当前的term的，进行log覆盖</li>
+</ul>
+<h3 id="Safety"><a href="#Safety" class="headerlink" title="Safety"></a>Safety</h3><p>Raft通过上面几个属性保障在<strong>各类异常</strong>情况下仍然正常工作（数据中心被炸不算）</p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/safety.png" alt="image-20210510122334712"></p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/fig10.png" alt="image-20210510122547221"></p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/fig11.png" alt="image-20210510094618912"></p>
+<h3 id="Log-Compaction"><a href="#Log-Compaction" class="headerlink" title="Log Compaction"></a>Log Compaction</h3><p>由于Log只执行追加操作，而不进行删除和覆盖，Raft需要定期执行log compaction。snapshot可以分以下情况以提升性能。</p>
+<p><img src="/Users/liwang/Documents/Blog/blog/source/_posts/raft/compaction.png" alt="image-20210510122736833"></p>
+<ul>
+<li><p>定期做日志 snapshot，可使用copy-on-write技术</p>
+</li>
+<li><p>可以直接保留最新的log index和term</p>
+</li>
+<li><p>Leader执行AppendEntries RPC时，节点log entry落后太多也可以直接发送snapshot</p>
+</li>
+</ul>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>Raft 主要包括两个独立的子问题，Leader election和log replication。流程就是先选举出Leader，然后由Leader负责复制和提交log。<br>为了保证算法的safety属性，Raft对其子问题加上了诸多约束：</p>
+<p>Election restriction：</p>
+<ul>
+<li>每个任期的节点在进行投票都只能投一票，原则是先来先到</li>
+<li>选举人的信息必须比自己了解的多(term, log replication)</li>
+</ul>
+<p>Log replication</p>
+<ul>
+<li>一个log可以被复制到大多数节点（committed），且不能被回滚；</li>
+<li>Leader 一定包含最新的committed log,因此log只会追加而不会覆盖删除；</li>
+<li>不同节点，某个位置上日志相同，那么这个位置之前的所有日志一定是相同的；</li>
+<li>Raft 不能够提交上个任期的log entries。</li>
+</ul>
+<p>本文是自己阅读论文和其他博客写的总结。不能全面，假如只是对Raft做一些基本了解。可以看这个<a target="_blank" rel="noopener" href="http://www.kailing.pub/raft/index.html">演示动画</a>帮助理解，假如想详细了解Raft算法还是需要阅读原文，阅读一下现有的Raft实现。</p>
+
       
     </div>
 
