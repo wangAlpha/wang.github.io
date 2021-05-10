@@ -24,7 +24,7 @@
 <meta property="og:type" content="article">
 <meta property="og:title" content="理解 Raft 协议">
 <meta property="og:url" content="https://wangalpha.github.io/2021/05/09/raft/index.html">
-<meta property="og:site_name" content="旺旺">
+<meta property="og:site_name" content="CodingNote">
 <meta property="og:description" content="理解 Raft 协议最近在学习mit 6.824课程，重新阅读了一些论文，拿本博客记录一下自己的学习。 大名鼎鼎的Paxos算法不少人都听说过，据说世界上有两种一致性算法，一种是Paxos算法，一类的Paxos算法变种。但由于Paxos的晦涩难懂和作者本人一样出名，也非常难以实习。斯坦福的两位教授（Diego Ongaro 和 John Ousterhout）设计了一个效果和Paxos相同但更易理">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:image" content="https://wangalpha.github.io/2021/05/09/raft/states.png">
@@ -53,7 +53,7 @@
 <script class="next-config" data-name="page" type="application/json">{&quot;sidebar&quot;:&quot;&quot;,&quot;isHome&quot;:false,&quot;isPost&quot;:true,&quot;lang&quot;:&quot;zh-CN&quot;,&quot;comments&quot;:true,&quot;permalink&quot;:&quot;https:&#x2F;&#x2F;wangalpha.github.io&#x2F;2021&#x2F;05&#x2F;09&#x2F;raft&#x2F;&quot;,&quot;path&quot;:&quot;2021&#x2F;05&#x2F;09&#x2F;raft&#x2F;&quot;,&quot;title&quot;:&quot;理解 Raft 协议&quot;}</script>
 
 <script class="next-config" data-name="calendar" type="application/json">&quot;&quot;</script>
-<title>理解 Raft 协议 | 旺旺</title><script src="/js/config.js"></script>
+<title>理解 Raft 协议 | CodingNote</title><script src="/js/config.js"></script>
   
 
 
@@ -82,10 +82,9 @@
 
     <a href="/" class="brand" rel="start">
       <i class="logo-line"></i>
-      <h1 class="site-title">旺旺</h1>
+      <h1 class="site-title">CodingNote</h1>
       <i class="logo-line"></i>
     </a>
-      <p class="site-subtitle" itemprop="description">旺旺的个人空间</p>
   </div>
 
   <div class="site-nav-right">
@@ -197,7 +196,7 @@
     </span>
 
     <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="旺旺">
+      <meta itemprop="name" content="CodingNote">
     </span>
       <header class="post-header">
         <h1 class="post-title" itemprop="name headline">
