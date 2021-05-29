@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.3/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css">
+
+<script class="next-config" data-name="main" type="application/json">{&quot;hostname&quot;:&quot;wangalpha.github.io&quot;,&quot;root&quot;:&quot;&#x2F;&quot;,&quot;images&quot;:&quot;&#x2F;images&quot;,&quot;scheme&quot;:&quot;Mist&quot;,&quot;version&quot;:&quot;8.4.0&quot;,&quot;exturl&quot;:false,&quot;sidebar&quot;:{&quot;position&quot;:&quot;right&quot;,&quot;display&quot;:&quot;always&quot;,&quot;padding&quot;:18,&quot;offset&quot;:12},&quot;copycode&quot;:false,&quot;bookmark&quot;:{&quot;enable&quot;:false,&quot;color&quot;:&quot;#222&quot;,&quot;save&quot;:&quot;auto&quot;},&quot;fancybox&quot;:false,&quot;mediumzoom&quot;:false,&quot;lazyload&quot;:false,&quot;pangu&quot;:false,&quot;comments&quot;:{&quot;style&quot;:&quot;tabs&quot;,&quot;active&quot;:null,&quot;storage&quot;:true,&quot;lazyload&quot;:false,&quot;nav&quot;:null},&quot;motion&quot;:{&quot;enable&quot;:true,&quot;async&quot;:false,&quot;transition&quot;:{&quot;post_block&quot;:&quot;fadeIn&quot;,&quot;post_header&quot;:&quot;fadeInDown&quot;,&quot;post_body&quot;:&quot;fadeInDown&quot;,&quot;coll_header&quot;:&quot;fadeInLeft&quot;,&quot;sidebar&quot;:&quot;fadeInUp&quot;}},&quot;prism&quot;:false,&quot;i18n&quot;:{&quot;placeholder&quot;:&quot;搜索...&quot;,&quot;empty&quot;:&quot;没有找到任何搜索结果：${query}&quot;,&quot;hits_time&quot;:&quot;找到 ${hits} 个搜索结果（用时 ${time} 毫秒）&quot;,&quot;hits&quot;:&quot;找到 ${hits} 个搜索结果&quot;}}</script>
+<meta name="description" content="Zap 详解背景Zab的论文难读的一批，写篇blog帮助自己理解。ZooKeeper是一个云计算协调服务，并为其他的应用提供基本的同步和集群服务。ZooKeeper的核心是一个原子广播协议，为节点提供选举，同步和leader广播功能。 Zab 实现条件 属性确保  Reliable delivery If a message, m, is delivered by one server, it w">
+<meta property="og:type" content="article">
+<meta property="og:title" content="zab">
+<meta property="og:url" content="https://wangalpha.github.io/2021/05/29/zab/index.html">
+<meta property="og:site_name" content="CodingNote">
+<meta property="og:description" content="Zap 详解背景Zab的论文难读的一批，写篇blog帮助自己理解。ZooKeeper是一个云计算协调服务，并为其他的应用提供基本的同步和集群服务。ZooKeeper的核心是一个原子广播协议，为节点提供选举，同步和leader广播功能。 Zab 实现条件 属性确保  Reliable delivery If a message, m, is delivered by one server, it w">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/zab_summary.png">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/phase_discovery.png">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/phase_synchronization.png">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/phase_broadcast.png">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/implemented_protocal.png">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/recovery_phase.png">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/notif_recv_thread.png">
+<meta property="og:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/fast_leader_election.png">
+<meta property="article:published_time" content="2021-05-29T04:16:38.000Z">
+<meta property="article:modified_time" content="2021-05-29T04:18:49.000Z">
+<meta property="article:author" content="liwang">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://wangalpha.github.io/2021/05/29/zab/zab/zab_summary.png">
+
+
+<link rel="canonical" href="https://wangalpha.github.io/2021/05/29/zab/">
+
+
+
+<script class="next-config" data-name="page" type="application/json">{&quot;sidebar&quot;:&quot;&quot;,&quot;isHome&quot;:false,&quot;isPost&quot;:true,&quot;lang&quot;:&quot;zh-CN&quot;,&quot;comments&quot;:true,&quot;permalink&quot;:&quot;https:&#x2F;&#x2F;wangalpha.github.io&#x2F;2021&#x2F;05&#x2F;29&#x2F;zab&#x2F;&quot;,&quot;path&quot;:&quot;2021&#x2F;05&#x2F;29&#x2F;zab&#x2F;&quot;,&quot;title&quot;:&quot;zab&quot;}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">&quot;&quot;</script>
+<title>zab | CodingNote</title><script src="/js/config.js"></script>
+  
+
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">CodingNote</h1>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu">
+        <li class="menu-item menu-item-home"><a href="/" rel="section">首页</a></li>
+        <li class="menu-item menu-item-about"><a href="/about/" rel="section">关于</a></li>
+        <li class="menu-item menu-item-tags"><a href="/tags/" rel="section">标签</a></li>
+        <li class="menu-item menu-item-archives"><a href="/archives/" rel="section">归档</a></li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+        
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Zap-%E8%AF%A6%E8%A7%A3"><span class="nav-number">1.</span> <span class="nav-text">Zap 详解</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%83%8C%E6%99%AF"><span class="nav-number">1.1.</span> <span class="nav-text">背景</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Zab-%E5%AE%9E%E7%8E%B0%E6%9D%A1%E4%BB%B6"><span class="nav-number">1.2.</span> <span class="nav-text">Zab 实现条件</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0"><span class="nav-number">1.2.1.</span> <span class="nav-text">实现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Reference"><span class="nav-number">1.2.2.</span> <span class="nav-text">Reference</span></a></li></ol></li></ol></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author site-overview-item animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="liwang"
+      src="/images/liwang.jpg">
+  <p class="site-author-name" itemprop="name">liwang</p>
+  <div class="site-description" itemprop="description">世间大事,必做于细；世间难事，必作于易</div>
+</div>
+<div class="site-state-wrap site-overview-item animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">4</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+
+
+
+        </div>
+      </div>
+    </div>
+  </aside>
+  <div class="sidebar-dimmer"></div>
+
+
+    </header>
+
+    
+
+  <a href="https://github.com/wangAlpha" class="github-corner" title="Follow me on GitHub" aria-label="Follow me on GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://wangalpha.github.io/2021/05/29/zab/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/liwang.jpg">
+      <meta itemprop="name" content="liwang">
+      <meta itemprop="description" content="世间大事,必做于细；世间难事，必作于易">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="CodingNote">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          zab
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+      
+
+      <time title="创建时间：2021-05-29 12:16:38 / 修改时间：12:18:49" itemprop="dateCreated datePublished" datetime="2021-05-29T12:16:38+08:00">2021-05-29</time>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+        <h1 id="Zap-详解"><a href="#Zap-详解" class="headerlink" title="Zap 详解"></a>Zap 详解</h1><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>Zab的论文难读的一批，写篇blog帮助自己理解。ZooKeeper是一个云计算协调服务，并为其他的应用提供基本的同步和集群服务。ZooKeeper的核心是一个原子广播协议，为节点提供选举，同步和leader广播功能。</p>
+<h2 id="Zab-实现条件"><a href="#Zab-实现条件" class="headerlink" title="Zab 实现条件"></a>Zab 实现条件</h2><ol>
+<li>属性确保<blockquote>
+<ul>
+<li><p><em>Reliable delivery</em></p>
+<p>If a message, <strong>m</strong>, is delivered by one server, it will be eventually delivered by all servers.</p>
+</li>
+<li><p><em>Total order</em></p>
+<p>If a message is delivered before message b by one server, a will be delivered before b by all servers. If a and b are delivered messages, either a will be delivered before b or b will be delivered before a.</p>
+</li>
+<li><p><em>Causal order</em></p>
+<p>If a message b is sent after a message a has been delivered by the sender of b, a must be ordered before b. If a sender sends c after sending b, c must be ordered after b.</p>
+</li>
+</ul>
+</blockquote>
+</li>
+<li>一个集群的大部分节点都应该在正常运行状态</li>
+<li>假如一个节点出现了崩溃情况，那么应该立刻重启</li>
+</ol>
+<h3 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h3><ul>
+<li><p>为了保证高性能，ZooKeeper需要能处理多个未完成的状态变化的client请求。同时提交的操作根据FIFO顺序进行处理。相比之下，不能同时处理多个transaction。</p>
+</li>
+<li><p>附加的ZooKeeper性能需求：（a）低延时  （b）突发条件下的高可用性（c）平滑的错误处理</p>
+</li>
+<li><p>client可以从Zab的任意一个节点读取和写入数据</p>
+</li>
+<li><p><strong>zixd</strong> 是实现 <strong>Total order</strong> 的关键，一个transation 的 zxid $z = &lt;e, c&gt;$，</p>
+<p>e 是 epoch ，$e.epoch = e, z.counter = c$ 。$\langle e, c\rangle \prec_{z}\left\langle e^{\prime}, c^{\prime}\right\rangle$ 表明， $e&lt;e^{\prime}$ or if $e=e^{\prime}$ and $c&lt;c^{\prime} .$</p>
+</li>
+<li><blockquote>
+<p>− history: a log of transaction proposals accepted;</p>
+<p>− acceptedEpoch: the epoch number of the last NEWEPOCH message accepted;</p>
+<p>− currentEpoch: the epoch number of the last NEWLEADER message accepted;</p>
+<p>− lastZxid: zxid of the last proposal in the history;</p>
+</blockquote>
+</li>
+<li><p>Zab使用的是一种<em><strong>类似二阶段提交协议</strong></em>的算法。Phase 0，每个节点都处于  state <em>election</em>，每个节点检查自身的票并决定是否转变为一个follower或leader。leader负载在Phase3协调其他节点并<strong>广播消息</strong>。而Phase 1和Phase 2对于状态一致和奔溃恢复非常重要。Phase的任何阶段出现超时和失败，都可以重新进行leader election。</p>
+</li>
+<li><p>协议的四个阶段：</p>
+<ul>
+<li><strong>Phase 0: Leader election</strong></li>
+<li><strong>Phase 1: Discovery</strong></li>
+<li><strong>Phase 2: Synchronizaion</strong></li>
+<li><strong>Phase 3: Broadcast</strong></li>
+</ul>
+<p><img src="./zab/zab_summary.png" alt="image-20210528113223425"></p>
+</li>
+<li><p><strong>Phase 0: Leader election</strong>: 节点初始阶段，即 state $election$。无需使用特定的选举算法，选举出leader后，将投票存储在本地的内存中。称之为 <em>prospective leader</em>，只有在Phase 3开始时，<em>prospective leader</em>才会有用。</p>
+</li>
+<li><p><strong>Phase 1: Discovery</strong>:  <code>follower</code> 与<code>prospective leader</code> 通讯，leader 收集到最近follower接受到的<code>transaction</code>，以便建立新的 <code>epoch</code>。</p>
+<p><img src="./zab/phase_discovery.png" alt="image-20210528114007663"></p>
+</li>
+<li><p><strong>Phase 2: Synchronization</strong>: 该阶段决定了一部分的恢复协议，<code>leader</code>将上一<code>epoch</code>的最新<code>history</code>复制给其他<code>follower</code>。当回复的follower到了一个法定投票数Q后，leader发送<code>commit</code>给follower。这时，leader可以称为<code>established</code>。</p>
+<p><img src="./zab/phase_synchronization.png" alt="image-20210528114146237"></p>
+</li>
+<li><p><strong>Phase 3: Broadcast</strong>:如果没有崩溃发生，节点无限期处于这个阶段。一旦ZooKeeper发出写请求，立刻执行事务广播。开始时，Q应该是一致的，且不会有多个<code>leader</code>，同时也允许新的follower假如</p>
+<p><img src="./zab/phase_broadcast.png" alt="image-20210528114301289"></p>
+</li>
+<li><p>处于 <strong>Phase 1-3</strong>的leader，需要不断接收来着follower的心跳，一旦一段时间内没有收到Q数量的心跳，则重新进入Phase 1阶段。</p>
+</li>
+<li><p>**Fast Leader Election (FLE)**是默认实现，它的实现和raft类似。是在Q数量的follower找到一个有最新<code>history</code>的进程。这样Phase 1时，可以直接跳过。</p>
+<p><img src="./zab/implemented_protocal.png" alt="image-20210529095730413"></p>
+</li>
+<li><p>  恢复协议更像是Phase 2而不是Phase 1，Follower连接上leader发生最新的zxid给leader，然后leader决定如何同步该follower的 <code>history</code>。但是不同点在于，follower可以中止某些transaction在接收到TRUNC消息时，或者接收到DIFF消息后，接收来着leader的新提案。这个实现包含了一些之前没有的变量。</p>
+</li>
+</ul>
+<p><img src="./zab/recovery_phase.png" alt="image-20210529100010943"></p>
+<ul>
+<li><strong>Fast Leader Election</strong>:<ul>
+<li><strong>DeduceLeader</strong>(id): 推断并设置对方是FOLLOWING还是LEADING状态</li>
+<li><strong>Put</strong>(Table(id), vote, round): Table的映射值为 key: $id$  -&gt; (vote, round, version), version 是一个正整数 $i$ 表明当前是第几轮投票。 设 $(v, r, i)$ 是上一轮的<code>version</code>值(初始化 $(v, r, i)=(\perp, \perp, \perp)$ ), version : $=1$ 假如 $r \neq$ round,则version : $=i+1$.</li>
+<li><strong>Notifications Receiver</strong>, 与协议并行的线程，主要接收其他节点Q的通知，并通过队列转发到FLE上，并将协议的有关投票情况转发到其他的Q节点上去。</li>
+</ul>
+</li>
+</ul>
+<p><img src="./zab/notif_recv_thread.png" alt="image-20210529102139367"></p>
+<p><img src="./zab/fast_leader_election.png" alt="image-20210529102254917"></p>
+<h3 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h3><p><a target="_blank" rel="noopener" href="http://www.tcs.hut.fi/Studies/T-79.5001/reports/2012-deSouzaMedeiros.pdf">ZooKeeper’s Atomic Broadcast Protocol: Theory and practice</a><br><a target="_blank" rel="noopener" href="https://ieeexplore.ieee.org/abstract/document/5958223/"><strong>Zab</strong>: High-performance broadcast for primary-backup systems</a></p>
+<p><a target="_blank" rel="noopener" href="https://distributedalgorithm.wordpress.com/2015/06/20/architecture-of-zab-zookeeper-atomic-broadcast-protocol/">Architecture of ZAB – ZooKeeper Atomic Broadcast protocol</a></p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/2021/05/09/README/" rel="prev" title="">
+                  <i class="fa fa-chevron-left"></i> 
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+<script src="/js/comments.js"></script>
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+
+<div class="copyright">
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">liwang</span>
+</div>
+
+    </div>
+  </footer>
+
+  
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js"></script>
+<script src="/js/utils.js"></script><script src="/js/motion.js"></script><script src="/js/schemes/muse.js"></script><script src="/js/next-boot.js"></script>
+
+  
+
+
+
+
+
+
+  
+
+
+
+
+
+</body>
+</html>

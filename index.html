@@ -131,7 +131,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">3</span>
+          <span class="site-state-item-count">4</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
@@ -163,6 +163,149 @@
 
 
     <div class="main-inner index posts-expand">
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://wangalpha.github.io/2021/05/29/zab/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/liwang.jpg">
+      <meta itemprop="name" content="liwang">
+      <meta itemprop="description" content="世间大事,必做于细；世间难事，必作于易">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="CodingNote">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2021/05/29/zab/" class="post-title-link" itemprop="url">zab</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+      
+
+      <time title="创建时间：2021-05-29 12:16:38 / 修改时间：12:18:49" itemprop="dateCreated datePublished" datetime="2021-05-29T12:16:38+08:00">2021-05-29</time>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <h1 id="Zap-详解"><a href="#Zap-详解" class="headerlink" title="Zap 详解"></a>Zap 详解</h1><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>Zab的论文难读的一批，写篇blog帮助自己理解。ZooKeeper是一个云计算协调服务，并为其他的应用提供基本的同步和集群服务。ZooKeeper的核心是一个原子广播协议，为节点提供选举，同步和leader广播功能。</p>
+<h2 id="Zab-实现条件"><a href="#Zab-实现条件" class="headerlink" title="Zab 实现条件"></a>Zab 实现条件</h2><ol>
+<li>属性确保<blockquote>
+<ul>
+<li><p><em>Reliable delivery</em></p>
+<p>If a message, <strong>m</strong>, is delivered by one server, it will be eventually delivered by all servers.</p>
+</li>
+<li><p><em>Total order</em></p>
+<p>If a message is delivered before message b by one server, a will be delivered before b by all servers. If a and b are delivered messages, either a will be delivered before b or b will be delivered before a.</p>
+</li>
+<li><p><em>Causal order</em></p>
+<p>If a message b is sent after a message a has been delivered by the sender of b, a must be ordered before b. If a sender sends c after sending b, c must be ordered after b.</p>
+</li>
+</ul>
+</blockquote>
+</li>
+<li>一个集群的大部分节点都应该在正常运行状态</li>
+<li>假如一个节点出现了崩溃情况，那么应该立刻重启</li>
+</ol>
+<h3 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h3><ul>
+<li><p>为了保证高性能，ZooKeeper需要能处理多个未完成的状态变化的client请求。同时提交的操作根据FIFO顺序进行处理。相比之下，不能同时处理多个transaction。</p>
+</li>
+<li><p>附加的ZooKeeper性能需求：（a）低延时  （b）突发条件下的高可用性（c）平滑的错误处理</p>
+</li>
+<li><p>client可以从Zab的任意一个节点读取和写入数据</p>
+</li>
+<li><p><strong>zixd</strong> 是实现 <strong>Total order</strong> 的关键，一个transation 的 zxid $z = &lt;e, c&gt;$，</p>
+<p>e 是 epoch ，$e.epoch = e, z.counter = c$ 。$\langle e, c\rangle \prec_{z}\left\langle e^{\prime}, c^{\prime}\right\rangle$ 表明， $e&lt;e^{\prime}$ or if $e=e^{\prime}$ and $c&lt;c^{\prime} .$</p>
+</li>
+<li><blockquote>
+<p>− history: a log of transaction proposals accepted;</p>
+<p>− acceptedEpoch: the epoch number of the last NEWEPOCH message accepted;</p>
+<p>− currentEpoch: the epoch number of the last NEWLEADER message accepted;</p>
+<p>− lastZxid: zxid of the last proposal in the history;</p>
+</blockquote>
+</li>
+<li><p>Zab使用的是一种<em><strong>类似二阶段提交协议</strong></em>的算法。Phase 0，每个节点都处于  state <em>election</em>，每个节点检查自身的票并决定是否转变为一个follower或leader。leader负载在Phase3协调其他节点并<strong>广播消息</strong>。而Phase 1和Phase 2对于状态一致和奔溃恢复非常重要。Phase的任何阶段出现超时和失败，都可以重新进行leader election。</p>
+</li>
+<li><p>协议的四个阶段：</p>
+<ul>
+<li><strong>Phase 0: Leader election</strong></li>
+<li><strong>Phase 1: Discovery</strong></li>
+<li><strong>Phase 2: Synchronizaion</strong></li>
+<li><strong>Phase 3: Broadcast</strong></li>
+</ul>
+<p><img src="./zab/zab_summary.png" alt="image-20210528113223425"></p>
+</li>
+<li><p><strong>Phase 0: Leader election</strong>: 节点初始阶段，即 state $election$。无需使用特定的选举算法，选举出leader后，将投票存储在本地的内存中。称之为 <em>prospective leader</em>，只有在Phase 3开始时，<em>prospective leader</em>才会有用。</p>
+</li>
+<li><p><strong>Phase 1: Discovery</strong>:  <code>follower</code> 与<code>prospective leader</code> 通讯，leader 收集到最近follower接受到的<code>transaction</code>，以便建立新的 <code>epoch</code>。</p>
+<p><img src="./zab/phase_discovery.png" alt="image-20210528114007663"></p>
+</li>
+<li><p><strong>Phase 2: Synchronization</strong>: 该阶段决定了一部分的恢复协议，<code>leader</code>将上一<code>epoch</code>的最新<code>history</code>复制给其他<code>follower</code>。当回复的follower到了一个法定投票数Q后，leader发送<code>commit</code>给follower。这时，leader可以称为<code>established</code>。</p>
+<p><img src="./zab/phase_synchronization.png" alt="image-20210528114146237"></p>
+</li>
+<li><p><strong>Phase 3: Broadcast</strong>:如果没有崩溃发生，节点无限期处于这个阶段。一旦ZooKeeper发出写请求，立刻执行事务广播。开始时，Q应该是一致的，且不会有多个<code>leader</code>，同时也允许新的follower假如</p>
+<p><img src="./zab/phase_broadcast.png" alt="image-20210528114301289"></p>
+</li>
+<li><p>处于 <strong>Phase 1-3</strong>的leader，需要不断接收来着follower的心跳，一旦一段时间内没有收到Q数量的心跳，则重新进入Phase 1阶段。</p>
+</li>
+<li><p>**Fast Leader Election (FLE)**是默认实现，它的实现和raft类似。是在Q数量的follower找到一个有最新<code>history</code>的进程。这样Phase 1时，可以直接跳过。</p>
+<p><img src="./zab/implemented_protocal.png" alt="image-20210529095730413"></p>
+</li>
+<li><p>  恢复协议更像是Phase 2而不是Phase 1，Follower连接上leader发生最新的zxid给leader，然后leader决定如何同步该follower的 <code>history</code>。但是不同点在于，follower可以中止某些transaction在接收到TRUNC消息时，或者接收到DIFF消息后，接收来着leader的新提案。这个实现包含了一些之前没有的变量。</p>
+</li>
+</ul>
+<p><img src="./zab/recovery_phase.png" alt="image-20210529100010943"></p>
+<ul>
+<li><strong>Fast Leader Election</strong>:<ul>
+<li><strong>DeduceLeader</strong>(id): 推断并设置对方是FOLLOWING还是LEADING状态</li>
+<li><strong>Put</strong>(Table(id), vote, round): Table的映射值为 key: $id$  -&gt; (vote, round, version), version 是一个正整数 $i$ 表明当前是第几轮投票。 设 $(v, r, i)$ 是上一轮的<code>version</code>值(初始化 $(v, r, i)=(\perp, \perp, \perp)$ ), version : $=1$ 假如 $r \neq$ round,则version : $=i+1$.</li>
+<li><strong>Notifications Receiver</strong>, 与协议并行的线程，主要接收其他节点Q的通知，并通过队列转发到FLE上，并将协议的有关投票情况转发到其他的Q节点上去。</li>
+</ul>
+</li>
+</ul>
+<p><img src="./zab/notif_recv_thread.png" alt="image-20210529102139367"></p>
+<p><img src="./zab/fast_leader_election.png" alt="image-20210529102254917"></p>
+<h3 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h3><p><a target="_blank" rel="noopener" href="http://www.tcs.hut.fi/Studies/T-79.5001/reports/2012-deSouzaMedeiros.pdf">ZooKeeper’s Atomic Broadcast Protocol: Theory and practice</a><br><a target="_blank" rel="noopener" href="https://ieeexplore.ieee.org/abstract/document/5958223/"><strong>Zab</strong>: High-performance broadcast for primary-backup systems</a></p>
+<p><a target="_blank" rel="noopener" href="https://distributedalgorithm.wordpress.com/2015/06/20/architecture-of-zab-zookeeper-atomic-broadcast-protocol/">Architecture of ZAB – ZooKeeper Atomic Broadcast protocol</a></p>
+
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
 
     
 
